@@ -281,6 +281,7 @@
         if (!entry) return false;
         if (entry.seq !== null && lastSeq !== null && entry.seq === lastSeq) return false;  /* 同 seq 忽略 */
         if (entry.seq !== null) lastSeq = entry.seq;
+        if (current && current.text === entry.text) return false;   /* 正在说的就是这句，不重复 */
         if (current) return enqueue(entry);      /* 正在显示：排队，不打断 */
         show(entry);
         return true;

@@ -188,7 +188,9 @@ test("bubbleTone 与网页版 20-ball.js 同档", () => {
   eq(BallPage.bubbleTone("30"), "work");
   eq(BallPage.bubbleTone("37"), "work");
   eq(BallPage.bubbleTone("02"), "plain");
-  eq(BallPage.bubbleTone("1"), "warm", "单个数字 1 要补成 01? 不：1 -> 01 -> 生命周期，plain");
+  eq(BallPage.bubbleTone("1"), "plain", "单个数字补零成 01：生命周期，落在 plain");
+  eq(BallPage.bubbleTone(10), "warm", "数字 10 也认");
+  eq(BallPage.bubbleTone(null), "plain");
 });
 
 /* ============================================================================
@@ -287,8 +289,8 @@ test("逐字 42ms、>30 字 ×0.6、前置 600ms、阅读 65ms/字（2.6s~9s）"
 
   // 10 字：600 + 420 + 2600 = 3620
   eq(BubblePage.totalMs("字".repeat(10)), 3620);
-  // 50 字：600 + 50×25 + 3250 = 6100
-  eq(BubblePage.totalMs("字".repeat(50)), 6100, "长句加速后总时长");
+  // 50 字：600 + 50×25 + 3250 = 5100
+  eq(BubblePage.totalMs("字".repeat(50)), 5100, "长句加速后总时长");
   // 点一次续 5s
   eq(BubblePage.totalMs("字".repeat(10), 5000), 8620);
 });
@@ -319,7 +321,7 @@ test("打字机：600ms 前置 + 42ms/字；读完 bubbleDone（队列空）", (
   b.clock.advance(42 * 3);
   eq(b.core.getTyped(), 4, "42ms/字");
   ok(b.types().includes("bubbleDone") === false, "还没读完不该回执");
-  b.clock.advance(BubblePage.readMs("你好世界") + 10);
+  b.clock.advance(BubblePage.totalMs("你好世界") - 600 - 42 * 3 + 10);
   eq(b.core.getCurrent(), null, "读完当前条已收起");
   eq(b.types().filter((t) => t === "bubbleDone").length, 1, "队列空了回一条 bubbleDone");
 });
@@ -328,23 +330,28 @@ test("长句加速：31 字用 25ms/字", () => {
   const text = "词".repeat(31);
   const b = newBubbleCore();
   b.api.bubble(JSON.stringify({ text, seq: 1 }));
-  b.clock.advance(600 + 25 * 5);
+  b.clock.advance(600 + 25 * 4);
   eq(b.core.getTyped(), 5, "长句 25ms 出第 5 个字");
 });
 
 test("点一下续 5s，可连点；不重置打字进度", () => {
   const b = newBubbleCore();
-  b.api.bubble(JSON.stringify({ text: "字".repeat(10), seq: 1 }));
-  const base = BubblePage.totalMs("字".repeat(10));
+  const text = "字".repeat(15);
+  const base = BubblePage.totalMs(text);
+  b.api.bubble(JSON.stringify({ text, seq: 1 }));
   b.clock.advance(base - 100);                 // 差 100ms 就该收了
+  eq(b.core.getTyped(), 15, "打字已经打完");
   b.api.tap();
   eq(b.core.getExtraMs(), 5000, "续了 5s");
   eq(b.types().filter((t) => t === "bubbleTap").length, 1, "tap 上报");
+  eq(b.core.getTyped(), 15, "续时不重置打字进度");
   b.clock.advance(4900);
   ok(b.core.getCurrent() !== null, "续时后还在显示");
   b.api.tap();
   eq(b.core.getExtraMs(), 10000, "可连点");
-  b.clock.advance(5001);
+  b.clock.advance(base + 10000 - 1);
+  ok(b.core.getCurrent() !== null, "两次续时还没用完");
+  b.clock.advance(2);
   ok(b.core.getCurrent() === null, "两次续时用完后收起");
 });
 
@@ -464,22 +471,36 @@ test("位移 > 8 逻辑 px：取消 tap，改走 dragStart/drag/dragEnd", () => 
   eq(s.types()[s.types().length - 1], "dragEnd");
 });
 
-test("drag 上报走节流：小碎步不刷屏，凑够 8px 才发", () => {
+test("drag 上报走节流：小碎步不刷屏，凑够 8 逻辑 px 才发", () => {
   const s = newGestureSpy();
   s.g.down({ pointerId: 1, clientX: 0, clientY: 0, button: 0 });
-  s.g.move({ pointerId: 1, clientX: 9, clientY: 0 });
-  eq(s.g.flushDrag(false), false, "不到 8 逻辑 px 且不到 40ms：不发");
-  s.g.move({ pointerId: 1, clientX: 12, clientY: 0 });
-  eq(s.g.flushDrag(false), true, "累积到 8 就发");
-  deepEq(s.events.filter((e) => e.startsWith("drag:")), ["drag:12,0"]);
+  s.g.move({ pointerId: 1, clientX: 6, clientY: 0 });    // 还没到拖动阈值
+  eq(s.g.flushDrag(false), false, "还没判定拖动：没有位移可发");
+  s.g.move({ pointerId: 1, clientX: 10, clientY: 0 });   // 越过阈值：dragStart，先攒 4px
+  eq(s.g.flushDrag(false), false, "只攒到 4px 且不到 40ms：先攒着");
+  s.g.move({ pointerId: 1, clientX: 14, clientY: 0 });   // 攒到 8px
+  eq(s.g.flushDrag(false), true, "累积到 8 就发一条");
+  deepEq(s.events.filter((e) => e.startsWith("drag:")), ["drag:8,0"]);
 });
 
-test("density 缩放：位移按物理 px 上报", () => {
+test("拖动久了即使位移小也按时上报（40ms 节流）", () => {
+  const s = newGestureSpy();
+  s.g.down({ pointerId: 1, clientX: 0, clientY: 0, button: 0 });
+  s.g.move({ pointerId: 1, clientX: 12, clientY: 0 });
+  s.g.flushDrag(false);
+  s.g.move({ pointerId: 1, clientX: 14, clientY: 0 });   // 只走了 2px
+  eq(s.g.flushDrag(false), false, "小碎步先攒着");
+  s.clock.advance(40);
+  eq(s.g.flushDrag(false), true, "到 40ms 就补一条");
+  deepEq(s.events.filter((e) => e.startsWith("drag:")), ["drag:12,0", "drag:2,0"]);
+});
+
+test("density 缩放：位移按物理 px 上报（App 用 dp 开窗）", () => {
   const s = newGestureSpy({ density: () => 2.75 });
   s.g.down({ pointerId: 1, clientX: 0, clientY: 0, button: 0 });
-  s.g.move({ pointerId: 1, clientX: 4, clientY: 0 });
-  s.g.flushDrag(false);           // 4 * 2.75 = 11
-  deepEq(s.events.filter((e) => e.startsWith("drag:")), ["drag:11,0"]);
+  s.g.move({ pointerId: 1, clientX: 10, clientY: 0 });   // 10 逻辑 px → 27.5 物理 px
+  eq(s.g.flushDrag(false), true);
+  deepEq(s.events.filter((e) => e.startsWith("drag:")), ["drag:28,0"]);
 });
 
 test("长按 0.5s 触发 longPress，松手不再 tap", () => {
@@ -828,7 +849,7 @@ if (!JSDOM) {
     clock.advance(500);
     fire("pointerup", 40, 40);
 
-    const types = managers.__postedTypes || page.types();
+    const types = page.types();
     ok(types.includes("tap"), "单击上报 tap");
     ok(types.includes("dragStart") && types.includes("dragEnd"), "拖动上报 dragStart/dragEnd");
     ok(types.includes("drag"), "拖动上报 drag");

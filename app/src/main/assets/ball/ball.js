@@ -315,7 +315,12 @@
       var dx = e.clientX - active.x0;      /* 逻辑 px（CSS px） */
       var dy = e.clientY - active.y0;
       if (!active.moved) {
-        if (Math.abs(dx) + Math.abs(dy) <= threshold) return false;
+        if (Math.abs(dx) + Math.abs(dy) <= threshold) {
+          /* 阈值内的抖动不算拖动：只记位置，不累积位移、不算进窗口移动 */
+          active.x = e.clientX;
+          active.y = e.clientY;
+          return false;
+        }
         active.moved = true;
         clearHold();                       /* 开始拖动 => tap 与长按都作废 */
         lastFlushAt = nowFn();
@@ -389,7 +394,11 @@
     var w = base.win || (typeof window !== "undefined" ? window : {});
     var emotions = base.emotions || EMOTIONS;
     var mount = base.mount === undefined ? (typeof document !== "undefined" ? document.getElementById("dsh-ball") : null) : base.mount;
-    var docNode = base.doc === undefined ? (typeof document !== "undefined" ? (document.getElementById("dsh-stage") || document.body) : null) : base.doc;
+    /* docNode = Document（拿 documentElement 切主题）；stageNode = 球窗元素（手势 + data-dragging） */
+    var docNode = base.doc === undefined ? (typeof document !== "undefined" ? document : null) : base.doc;
+    var stageNode = base.stage === undefined
+      ? (typeof document !== "undefined" ? (document.getElementById("dsh-stage") || document.body) : null)
+      : base.stage;
     var constants = base.constants || {};
     var parse = base.parseJson || parseJson;
     var normalize = base.normalizeState || normalizeState;
@@ -474,9 +483,9 @@
     }
 
     function applyVisual() {
-      var html = typeof document !== "undefined" ? document.documentElement : null;
+      var html = docNode && (docNode.documentElement || docNode);
       if (html && html.setAttribute) html.setAttribute("data-theme", settings.theme === "cream" ? "cream" : "dark");
-      if (docNode && docNode.style) docNode.style.opacity = String(clamp(Number(settings.opacity) || 1, 0.2, 1));
+      if (stageNode && stageNode.style) stageNode.style.opacity = String(clamp(Number(settings.opacity) || 1, 0.2, 1));
     }
 
     /* ---- 尺寸：球窗就是 overlaySize 见方，球画满整窗 ---- */
@@ -565,7 +574,7 @@
         }
       },
       onDragStart: function () {
-        if (docNode && docNode.setAttribute) docNode.setAttribute("data-dragging", "1");
+        if (stageNode && stageNode.setAttribute) stageNode.setAttribute("data-dragging", "1");
         wake(400);
         post("dragStart");
       },
@@ -574,7 +583,7 @@
         post("drag", { dx: dx, dy: dy });
       },
       onDragEnd: function () {
-        if (docNode && docNode.setAttribute) docNode.setAttribute("data-dragging", "0");
+        if (stageNode && stageNode.setAttribute) stageNode.setAttribute("data-dragging", "0");
         gestures.flushDrag(true);          /* 补发最后一段位移 */
         post("dragEnd");
         wake(300);
@@ -645,6 +654,7 @@
 
     function start() {
       if (destroyed) return false;
+      bindInput(stageNode);        /* 球窗就是 #dsh-stage，铺满整窗 */
       mountEngine();
       applyVisual();
       applyEmotion();
@@ -674,6 +684,30 @@
       engine = null;
     }
 
+    /* ---- 真实输入：指针事件绑在球窗（stage）上 ----
+     * 单击/长按/拖动全部交给 gestures 状态机；pointercancel 当拖动结束处理。 */
+    var inputBound = false;
+    function bindInput(node) {
+      if (!node || typeof node.addEventListener !== "function" || inputBound) return false;
+      inputBound = true;
+      node.addEventListener("pointerdown", function (e) {
+        if (e && typeof e.preventDefault === "function") e.preventDefault();   /* 顺带压住系统长按菜单 */
+        if (e && e.pointerId !== undefined && typeof node.setPointerCapture === "function") {
+          try { node.setPointerCapture(e.pointerId); } catch (err) { /* jsdom 里没有，忽略 */ }
+        }
+        gestures.down(e);
+      });
+      node.addEventListener("pointermove", function (e) {
+        if (gestures.move(e)) gestures.flushDrag(false);   /* 节流后按需上报 */
+      });
+      node.addEventListener("pointerup", function (e) { gestures.up(e); });
+      node.addEventListener("pointercancel", function (e) { gestures.cancel(e); });
+      node.addEventListener("contextmenu", function (e) {
+        if (e && typeof e.preventDefault === "function") e.preventDefault();
+      });
+      return true;
+    }
+
     Object.defineProperty(api, "engine", { get: function () { return engine; }, configurable: true });
 
     return {
@@ -693,7 +727,8 @@
       getSettings: function () { return settings; },
       getEngine: function () { return engine; },
       pickEmotion: pickEmotion,
-      reportSize: reportSize
+      reportSize: reportSize,
+      bindInput: bindInput
     };
   }
 
@@ -706,6 +741,7 @@
     var data = {
       win: w,
       doc: doc,
+      stage: env.stage !== undefined ? env.stage : (doc ? doc.getElementById("dsh-stage") : null),
       mount: env.mount !== undefined ? env.mount : (doc ? doc.getElementById("dsh-ball") : null),
       emotions: env.emotions || EMOTIONS,
       parseJson: env.parseJson || parseJson,

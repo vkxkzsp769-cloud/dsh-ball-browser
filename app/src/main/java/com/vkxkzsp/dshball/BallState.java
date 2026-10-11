@@ -17,6 +17,16 @@ public final class BallState {
     public static final String SRC_HOST = "host";
     public static final String SRC_NATIVE = "native";
 
+    private static final JSONObject EMPTY = emptyObject();
+
+    private static JSONObject emptyObject() {
+        try {
+            return new JSONObject();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     private final JSONObject raw;
 
     private BallState(JSONObject raw) {
@@ -35,12 +45,14 @@ public final class BallState {
     }
 
     public static BallState wrap(JSONObject obj, String src) {
-        JSONObject copy = obj == null ? new JSONObject() : new JSONObject(obj.toString());
+        JSONObject copy = new JSONObject();
         try {
+            if (obj != null) copy = new JSONObject(obj.toString());
             copy.put("v", VERSION);
             if (src != null) copy.put("src", src);
             copy.put("ts", System.currentTimeMillis());
         } catch (Throwable ignored) {
+            /* JSONObject 的构造与 put 都会抛受检异常，这里一律吃掉，兜底一份空状态 */
         }
         return new BallState(copy);
     }
@@ -66,9 +78,15 @@ public final class BallState {
         return raw.optInt(key, def);
     }
 
+    /** 取子对象；缺失或类型不对时返回一个空对象（JSONObject() 会抛受检异常，所以要兜住）。 */
     public JSONObject obj(String key) {
         JSONObject o = raw.optJSONObject(key);
-        return o == null ? new JSONObject() : o;
+        if (o != null) return o;
+        try {
+            return new JSONObject();
+        } catch (Throwable t) {
+            return EMPTY;
+        }
     }
 
     public long ts() {
