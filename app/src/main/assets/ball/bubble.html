@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- ============================================================================
+     bubble.html — 悬浮窗「气泡页」：只有气泡，不可触摸（FLAG_NOT_TOUCHABLE）。
+       file:///android_asset/ball/bubble.html
+     位置与朝向由 App 算：App 先调 __dshOverlay.setup({side,tipX,maxW,theme})，
+     再调 __dshOverlay.bubble({text,source,mood,seq})；页面报 bubbleSize 之后 App 开窗。
+     打字 / 排队 / 续时规则与网页版 20-ball.js 一致。
+     ========================================================================= -->
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <title>AI 表情球 · 气泡</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="dsh-bubble-root">
+    <!-- data-shown 在 bubbleSize 上报之后才会变成 1（防闪） -->
+    <div id="dsh-bubble" class="dsh-bubble" data-shown="0" data-side="top" data-tone="plain" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="bubble.js"></script>
+</body>
+</html>

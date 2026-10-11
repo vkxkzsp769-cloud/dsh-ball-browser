@@ -1,0 +1,153 @@
+/* ============================================================================
+ * style.css — 悬浮窗两页共用样式（index.html 球 / bubble.html 气泡）
+ *
+ * 主题变量挂在 :root，由 settings/theme 切到 [data-theme="cream"]。
+ * 触摸规则：整页禁选中、禁系统长按菜单、touch-action:none。
+ * 尺寸：球窗就是 overlaySize 见方，body 铺满，球画满整窗，特效裁在窗口内。
+ * ========================================================================== */
+
+:root {
+  --dsh-bg: transparent;
+  --dsh-ink: #f5f5f5;
+  --dsh-ink-dim: rgba(245, 245, 245, 0.72);
+  --dsh-bubble-bg: rgba(26, 26, 26, 0.92);
+  --dsh-bubble-border: rgba(245, 245, 245, 0.16);
+  --dsh-bubble-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+  --dsh-tip-x: 50%;
+}
+
+[data-theme="cream"] {
+  --dsh-ink: #1a1a1a;
+  --dsh-ink-dim: rgba(26, 26, 26, 0.7);
+  --dsh-bubble-bg: rgba(243, 240, 234, 0.96);
+  --dsh-bubble-border: rgba(26, 26, 26, 0.14);
+  --dsh-bubble-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--dsh-bg);
+  color: var(--dsh-ink);
+  font-family: -apple-system, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  /* 禁文本选中 / 禁系统长按菜单 / 禁浏览器手势接管（契约 4.3） */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+/* ---------------------------------------------------------------- 球页 */
+
+#dsh-stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden; /* 撒花/自旋必须裁在球窗内，不许超出窗口 */
+  cursor: grab;
+}
+
+#dsh-stage[data-dragging="1"] {
+  cursor: grabbing;
+}
+
+#dsh-ball {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#dsh-ball svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 拖动中的轻微放大，给一点「拿起来了」的反馈（裁在球窗内） */
+#dsh-stage[data-dragging="1"] #dsh-ball {
+  transform: scale(1.03);
+}
+
+/* ------------------------------------------------------------ 气泡页 */
+
+#dsh-bubble-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.dsh-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: 230px;
+  padding: 8px 11px;
+  border-radius: 14px;
+  background: var(--dsh-bubble-bg);
+  border: 1px solid var(--dsh-bubble-border);
+  box-shadow: var(--dsh-bubble-shadow);
+  color: var(--dsh-ink);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  /* 发 bubbleSize 之前不许显示，避免闪一下（契约：修订 A） */
+  visibility: hidden;
+  opacity: 0;
+}
+
+.dsh-bubble[data-shown="1"] {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* 小尖尖：指向球心 —— 横向位置由 setup.tipX 给（球心投影），翻面由 setup.side 给 */
+.dsh-bubble::after {
+  content: "";
+  position: absolute;
+  left: var(--dsh-tip-x);
+  margin-left: -7px;
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+}
+
+.dsh-bubble[data-side="top"]::after {
+  bottom: -8px;
+  border-top: 8px solid var(--dsh-bubble-bg);
+}
+
+.dsh-bubble[data-side="bottom"]::after {
+  top: -8px;
+  border-bottom: 8px solid var(--dsh-bubble-bg);
+}
+
+/* 心情 -> 气泡色调（和网页版一致的四档 + 默认） */
+.dsh-bubble[data-tone="warm"] {
+  border-color: rgba(244, 195, 78, 0.45);
+}
+
+.dsh-bubble[data-tone="blue"] {
+  border-color: rgba(91, 149, 240, 0.45);
+}
+
+.dsh-bubble[data-tone="alert"] {
+  border-color: rgba(249, 112, 92, 0.5);
+}
+
+.dsh-bubble[data-tone="work"] {
+  border-color: rgba(63, 190, 134, 0.42);
+}

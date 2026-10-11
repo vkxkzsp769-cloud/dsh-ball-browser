@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- ============================================================================
+     index.html — 悬浮窗「球页」：只有球，铺满窗口，可触摸。
+       file:///android_asset/ball/index.html
+     契约：docs/INTERFACES.md（v1 + 修订 A）。零外链、零 CDN、离线可用。
+     气泡是另一个窗口（bubble.html），本页不画气泡。
+     ========================================================================= -->
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <title>AI 表情球</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- data-dragging 由 ball.js 在拖动时切换；overflow:hidden 保证特效裁在窗口内 -->
+  <div id="dsh-stage" data-dragging="0" role="button" tabindex="0" aria-label="AI 表情球：拖动移动，单击自旋，长按设置">
+    <div id="dsh-ball"></div>
+  </div>
+
+  <!-- 引擎（MIT，window.EmotionBall）必须先加载：ball.js 挂载时要用 -->
+  <script src="engine.js"></script>
+  <script src="ball.js"></script>
+</body>
+</html>

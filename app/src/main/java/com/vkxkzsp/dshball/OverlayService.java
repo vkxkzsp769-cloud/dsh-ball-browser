@@ -465,15 +465,7 @@ public class OverlayService extends Service implements Bridge.Listener {
         lastResyncAt = now;
         MainActivity a = Bridge.get().activity();
         if (a == null) return;
-        /* 走页面上下文请求，避免自己造一套鉴权 */
-        a.evalJs("(function(){try{"
-                + "var rid='rs-'+Date.now().toString(36);"
-                + "fetch('/dsh-ball-bridge/status',{method:'POST',headers:{'content-type':'application/json'},"
-                + "body:JSON.stringify({rpcId:rid,type:'client-request',method:'dsh-ball-bridge/status',payload:{}}),"
-                + "credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){"
-                + "var st=j&&(j.value&&j.value.state||j.state);"
-                + "if(st&&window." + WebBridge.NAME + "){window." + WebBridge.NAME + ".post(JSON.stringify({type:'state',state:st}))}"
-                + "}).catch(function(){})}catch(e){}})();");
+        a.requestHostResync();
     }
 
     private void pushSettings() {

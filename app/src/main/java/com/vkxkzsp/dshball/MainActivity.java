@@ -170,6 +170,25 @@ public class MainActivity extends Activity implements Bridge.Listener {
                 + ", overlay: " + OverlayService.isRunning() + " };");
     }
 
+    /**
+     * 让页面替我们去宿主端点要一次状态（同源 + 带 cookie，不用自己造一套鉴权），
+     * 拿到后由页面通过 DshBallApp.post 回传。后台 JS 定时器被系统节流时，
+     * 由保活服务定期调这个方法强制跑一次。
+     */
+    public void requestHostResync() {
+        evalJs("(function(){try{"
+                + "var rid='rs-'+Date.now().toString(36);"
+                + "fetch('/dsh-ball-bridge/status',{method:'POST',"
+                + "headers:{'content-type':'application/json'},"
+                + "body:JSON.stringify({rpcId:rid,type:'client-request',"
+                + "method:'dsh-ball-bridge/status',payload:{}}),credentials:'same-origin'})"
+                + ".then(function(r){return r.json()}).then(function(j){"
+                + "var st=j&&((j.value&&j.value.state)||j.state);"
+                + "if(st&&window." + WebBridge.NAME + "){window." + WebBridge.NAME
+                + ".post(JSON.stringify({type:'state',state:st}))}"
+                + "}).catch(function(){})}catch(e){}})();");
+    }
+
     public void evalJs(String js) {
         try {
             web.evaluateJavascript(js, null);

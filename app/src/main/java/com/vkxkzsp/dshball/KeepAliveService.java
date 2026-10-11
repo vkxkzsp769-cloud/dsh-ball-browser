@@ -9,7 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
@@ -34,6 +36,25 @@ public class KeepAliveService extends Service {
     public static final String ACTION_SETTINGS = "com.vkxkzsp.dshball.OPEN_SETTINGS";
 
     private static volatile boolean running = false;
+
+    /** 定期「叫醒页面」：安卓在后台会节流网页里的定时器，这里从原生侧主动推一把。 */
+    private static final long NUDGE_MS = 15_000L;
+    private final Handler tick = new Handler(Looper.getMainLooper());
+    private final Runnable nudge = new Runnable() {
+        @Override
+        public void run() {
+            try {
+                Bridge b = Bridge.get();
+                b.pushHostToWeb();
+                if (!b.fresh()) {
+                    MainActivity a = b.activity();
+                    if (a != null) a.requestHostResync();
+                }
+            } catch (Throwable ignored) {
+            }
+            tick.postDelayed(this, NUDGE_MS);
+        }
+    };
 
     public static boolean isRunning() {
         return running;
@@ -75,6 +96,8 @@ public class KeepAliveService extends Service {
 
         running = true;
         startForeground(NOTIF_ID, buildNotification());
+        tick.removeCallbacks(nudge);
+        if (Prefs.pollHost(this)) tick.postDelayed(nudge, 5_000L);
         ensureIgnoringBatteryOptimizations();
         Log.i(Bridge.TAG, "KeepAliveService started");
         return START_STICKY;
@@ -88,6 +111,7 @@ public class KeepAliveService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        tick.removeCallbacks(nudge);
         super.onDestroy();
     }
 
