@@ -1,0 +1,97 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+# 创建 Release 需要写权限（新仓库默认只读，不加会 403）
+permissions:
+  contents: write
+
+env:
+  JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+
+jobs:
+  build-android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq openjdk-17-jdk unzip zip
+          java -version
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
+
+      - name: 安装 Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 安装平台与构建工具
+        run: |
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          ls "$ANDROID_SDK_ROOT/platforms" "$ANDROID_SDK_ROOT/build-tools"
+
+      - name: 配置 Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+          cache-read-only: false
+
+      # 注意：日志重定向到文件（不要用管道），否则日志和退出码都不可靠
+      - name: 编译 debug APK
+        run: |
+          gradle --no-daemon --stacktrace assembleDebug > build.log 2>&1
+          echo "退出码: $?"
+          tail -25 build.log
+
+      - name: 失败时打印错误摘要
+        if: failure()
+        run: |
+          echo "======== 错误摘要 ========"
+          grep -nE "^(e: |error:)|FAILURE:|Execution failed|What went wrong|Caused by|> Task .*FAILED|BUILD FAILED" build.log | head -60 || true
+          echo "======== 尾部日志 ========"
+          tail -80 build.log || true
+
+      - name: 上传编译日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
+
+      - name: 判定 APK
+        id: apk
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1 || true)
+          if [ -z "$APK" ]; then
+            echo "没有生成 APK"; echo "found=0" >> "$GITHUB_OUTPUT"; exit 1
+          fi
+          echo "APK: $APK ($(du -h "$APK" | cut -f1))"
+          echo "found=1" >> "$GITHUB_OUTPUT"
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: 上传 APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-ball-browser-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: 发布到 Release（方便手机直接下载）
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          cp "$APK" /tmp/dsh-ball-browser.apk
+          NOTES="自动云编译产物 · commit ${{ github.sha }} · $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh release create latest --title "最新构建" --notes "$NOTES" /tmp/dsh-ball-browser.apk 2>/dev/null \
+            || gh release upload latest /tmp/dsh-ball-browser.apk --clobber

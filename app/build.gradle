@@ -1,0 +1,56 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.vkxkzsp.dshball'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.vkxkzsp.dshball"
+        minSdk 26          // TYPE_APPLICATION_OVERLAY / 通知渠道 都要 26+
+        targetSdk 34
+        versionCode 3
+        versionName "1.0.2"
+    }
+
+    buildTypes {
+        debug {
+            // 故意用 debug 签名：手机上直接安装，不需要额外配置 keystore
+            applicationIdSuffix ""
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+            // 没有 release keystore 时用 debug 签名，保证产物一定能装
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+
+    packaging {
+        resources.excludes += ['META-INF/*']
+    }
+}
+
+// APK 文件名固定，Release 直链才不会变
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.outputs.forEach { output ->
+            output.outputFileName.set("dsh-ball-browser.apk")
+        }
+    }
+}
+
+// 零第三方依赖：只用 Android 框架 API（WebView / Service / Notification），
+// 这样云端编译不需要解析任何 maven 依赖，编译快且不会因仓库抽风失败。
+dependencies { }
