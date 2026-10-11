@@ -146,3 +146,45 @@ Java 调 `webView.evaluateJavascript("window.__dshBallApp.host(" + json + ")", n
 ## 8. 改接口的流程
 
 1. 先改本文件（带 v2 说明）；2. 通知另外两方并确认；3. 任何一方不许偷偷加字段语义。
+
+---
+
+# 附：v1 修订 A（2026-10-11）—— 气泡独立成窗
+
+**原因**：`TYPE_APPLICATION_OVERLAY` 的透明窗口会吃掉窗口范围内的所有触摸。
+若球和气泡共用一个大窗口，气泡那块区域就会挡住下面的 App（点不动）。所以拆成两个窗口：
+
+| 窗口 | 内容 | 触摸 | 尺寸 |
+| --- | --- | --- | --- |
+| 球窗 | `file:///android_asset/ball/index.html` | **可触摸**（拖动/单击/长按） | `overlaySize` × `overlaySize`（dp） |
+| 气泡窗 | `file:///android_asset/ball/bubble.html` | **不可触摸**（`FLAG_NOT_TOUCHABLE`） | 内容尺寸，App 按页面上报值开窗 |
+
+因此悬浮窗页要交两个 HTML：`index.html`（球）与 `bubble.html`（气泡），共用 `style.css` / 引擎。
+`bubble.html` 只负责打字/排队/续时/尖尖朝向；位置与朝向由 App 算（它知道球窗坐标与屏幕边界）。
+
+## 新增 JS 接口（覆盖前面第 4 节里跟气泡有关的部分）
+
+App -> 球页（`index.html`）仍然只有 `state / host / settings / cmd`；球页**不再**自己画气泡，
+收到带 `bubble` 的 state 后只上报，由 App 决定要不要开气泡窗。
+
+App -> 气泡页（`bubble.html`）：
+
+- `window.__dshOverlay.setup(json)` — `{ "side":"top"|"bottom", "tipX":40, "maxW":230, "theme":"dark" }`
+- `window.__dshOverlay.bubble(json)` — 同 BallState.bubble：`{ "text","source","mood","seq" }`；
+  新 `seq` 才打字，同 `seq` 忽略；正在播时进队列（上限 2，丢最旧）
+- `window.__dshOverlay.done()` — App 说「这轮结束，可以收了」
+
+气泡页 -> App（`DshOverlayHost.post`）：
+
+| type | 字段 | 语义 |
+| --- | --- | --- |
+| `bubbleSize` | `w`,`h` | 内容尺寸（逻辑 px），App 乘 density 开窗 |
+| `bubbleDone` | — | 这条读完且队列空了，App 关窗 |
+| `bubbleTap` | — | 用户点了气泡（App 不用处理，仅记录） |
+
+气泡页同样禁触摸选中、发 `bubbleSize` 前不许显示（避免闪一下）。
+
+## 球页（index.html）的尺寸约定
+
+- 球窗就是 `overlaySize` 见方，页面 `body` 铺满，球画满整窗（`width:100%;height:100%`）。
+- 撒花/自旋等特效必须裁剪在球窗内（`overflow:hidden`），不许超出窗口。
